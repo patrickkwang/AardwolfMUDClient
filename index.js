@@ -20,8 +20,8 @@ if (!fs.existsSync('logs')) {
 
 const now = new Date();
 // this is stupid, but it can't be inline
-const day = now.getDate();
-const timestamp = `${now.getFullYear()}${now.getMonth() + 1}${day}${now.getHours()}${now.getMinutes()}${now.getSeconds()}`;
+const day = ("0" + now.getDate()).slice(-2);
+const timestamp = `${now.getFullYear()}_${("0" + (now.getMonth() + 1)).slice(-2)}_${day}_${("0" + now.getHours()).slice(-2)}_${now.getMinutes()}`;
 const writeStream = fs.createWriteStream(`logs/${timestamp}.log`);
 
 // create the telnet connection
@@ -38,6 +38,11 @@ let groupInterval = null;
 
 input.on('submit', (msg) => {
   if (msg && loggedIn) {
+    const msgInd = history.indexOf(msg);
+    if (msgInd > -1) {
+      // move msg to end
+      history.splice(msgInd, 1);
+    }
     historyInd = history.push(msg);
   }
   if (dailyBlessingActive && msg.toLowerCase() === 'daily blessing') {
@@ -47,7 +52,7 @@ input.on('submit', (msg) => {
   if (msg.toLowerCase().includes('group accept') || msg.toLowerCase().includes('group create')) {
     groupInterval = setInterval(() => {
       tsock.write('group\n');
-    }, 1000 * 10);
+    }, 1000 * 5);
   }
   if (msg.toLowerCase().includes('group leave')) {
     clearInterval(groupInterval);
@@ -90,12 +95,15 @@ function ingest(message) {
   } else {
     input.censor = false;
   }
-  // output.log('-----------------------------new message-----------------------------');
-  writeStream.write(String.raw`${message}`);
   const lines = message.split('\n\r');
   const groupStats = RegExp(/-+.*\[.*Group:.*\].*-+/g);
+  // for full lines group stats
+  // -{32}.*\[.*Group:.*\].*-{32}.*[\d]{3}.* +[\d]+\/[\d]+ +[\d]+\/[\d]+ +[\d]+\/[\d]+ +[\d]+ +[\d]+ +\[\d;\d{2}m[\d]+ \[\d;\d{2}m +Y?
   if (groupStats.test(lines)) {
+    const colorChars = RegExp(/\[\d;\d{2}m/g);
+    const noColorLine = lines.join('').replace(colorChars, '');
     group_stats.setContent(lines.join('\r'));
+    writeStream.write(String.raw`${lines.join('\r')}`);
   } else {
     const mapList = [];
     lines.forEach((line) => {
@@ -145,7 +153,6 @@ function ingest(message) {
       map.setContent(mapList.join('\r'));
     }
   }
-  // output.log('-----------------------------end of message-----------------------------');
 }
 
 // exit the process when the telnet connection is closed
